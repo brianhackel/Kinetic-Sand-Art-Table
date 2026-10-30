@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sand Table LEDs</title>
+<style>
+  body { font-family: sans-serif; max-width: 28rem; margin: 1rem auto; padding: 0 1rem; }
+  label { display: block; margin-top: 1.2rem; font-weight: bold; }
+  select, input[type=range] { width: 100%; }
+  input[type=color] { width: 100%; height: 3rem; }
+  #status { margin-top: 1.5rem; color: #666; min-height: 1.2rem; }
+  #status.error { color: #b00020; }
+</style>
+</head>
+<body>
+<h1>Sand Table LEDs</h1>
+
+<label for="pattern">Pattern</label>
+<select id="pattern">
+  {% for name in patterns %}<option value="{{ loop.index0 }}">{{ name }}</option>
+  {% endfor %}
+</select>
+
+<label for="brightness">Brightness <span id="brightnessValue"></span></label>
+<input type="range" id="brightness" min="0" max="{{ max_brightness }}">
+
+<label for="speed">Speed <span id="speedValue"></span></label>
+<!-- slider is inverted so right = faster; the Arduino value is ms per step -->
+<input type="range" id="speed" min="{{ min_speed }}" max="{{ max_speed }}">
+
+<label for="color">Color</label>
+<input type="color" id="color">
+
+<div id="status"></div>
+
+<script>
+const MIN_SPEED = {{ min_speed }}, MAX_SPEED = {{ max_speed }};
+const $ = id => document.getElementById(id);
+const statusEl = $("status");
+
+// slider position <-> ms per step (right = faster)
+const sliderToSpeed = v => MIN_SPEED + MAX_SPEED - Number(v);
+const speedToSlider = s => MIN_SPEED + MAX_SPEED - s;
+
+function show(msg, isError) {
+  statusEl.textContent = msg;
+  statusEl.className = isError ? "error" : "";
+}
+
+async function api(path, body) {
+  try {
+    const r = await fetch("/api/" + path, body === undefined ? {} : {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(body),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || r.statusText);
+    show("");
+    return data;
+  } catch (e) {
+    show(e.message, true);
+    return null;
+  }
+}
+
+function debounce(fn, ms) {
+  let t;
+  return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+}
+
+function updateLabels() {
+  $("brightnessValue").textContent = $("brightness").value;
+  $("speedValue").textContent = sliderToSpeed($("speed").value) + " ms";
+}
+
+async function refresh() {
+  const s = await api("state");
+  if (!s) return;
+  $("pattern").value = s.pattern;
+  $("brightness").value = s.brightness;
+  $("speed").value = speedToSlider(s.speed);
+  $("color").value = s.color.toLowerCase();
+  updateLabels();
+}
+
+// Changing the pattern resets the color on the Nano, so re-read state afterwards.
+$("pattern").addEventListener("change", async () => {
+  await api("pattern", {pattern: Number($("pattern").value)});
+  refresh();
+});
+$("brightness").addEventListener("input", () => {
+  updateLabels();
+  sendBrightness();
+});
+$("speed").addEventListener("input", () => {
+  updateLabels();
+  sendSpeed();
+});
+$("color").addEventListener("input", () => sendColor());
+
+const sendBrightness = debounce(() => api("brightness", {brightness: Number($("brightness").value)}), 100);
+const sendSpeed = debounce(() => api("speed", {speed: sliderToSpeed($("speed").value)}), 100);
+const sendColor = debounce(() => api("color", {color: $("color").value}), 100);
+
+refresh();
+</script>
+</body>
+</html>

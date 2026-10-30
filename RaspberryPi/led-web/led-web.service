@@ -1,0 +1,15 @@
+[Unit]
+Description=Sand table LED web interface
+After=network.target
+
+[Service]
+User=pi
+Group=dialout
+WorkingDirectory=/home/pi/led-web
+Environment=LED_PORT=/dev/ttyUSB0
+# One worker only: a single process must own the serial port.
+ExecStart=/home/pi/led-web/venv/bin/gunicorn --workers 1 --threads 4 --bind 0.0.0.0:5001 app:app
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
