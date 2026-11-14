@@ -30,3 +30,6 @@
 *.exe
 *.out
 *.app
+
+# led-web remembered settings
+RaspberryPi/led-web/led-state.json
