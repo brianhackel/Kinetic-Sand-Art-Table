@@ -26,8 +26,8 @@
 <input type="range" id="brightness" min="0" max="{{ max_brightness }}">
 
 <label for="speed">Speed <span id="speedValue"></span></label>
-<!-- slider is inverted so right = faster; the Arduino value is ms per step -->
-<input type="range" id="speed" min="{{ min_speed }}" max="{{ max_speed }}">
+<!-- 0..100, right = faster; mapped to the Arduino's ms per step on a log scale -->
+<input type="range" id="speed" min="0" max="100">
 
 <label for="color">Color</label>
 <input type="color" id="color">
@@ -39,9 +39,10 @@ const MIN_SPEED = {{ min_speed }}, MAX_SPEED = {{ max_speed }};
 const $ = id => document.getElementById(id);
 const statusEl = $("status");
 
-// slider position <-> ms per step (right = faster)
-const sliderToSpeed = v => MIN_SPEED + MAX_SPEED - Number(v);
-const speedToSlider = s => MIN_SPEED + MAX_SPEED - s;
+// slider position 0..100 (100 = fastest) <-> ms per step, on a log scale
+const SPEED_RATIO = Math.log(MAX_SPEED / MIN_SPEED);
+const sliderToSpeed = v => Math.round(MIN_SPEED * Math.exp(SPEED_RATIO * (1 - Number(v) / 100)));
+const speedToSlider = s => Math.round(100 * (1 - Math.log(s / MIN_SPEED) / SPEED_RATIO));
 
 function show(msg, isError) {
   statusEl.textContent = msg;
@@ -72,7 +73,7 @@ function debounce(fn, ms) {
 
 function updateLabels() {
   $("brightnessValue").textContent = $("brightness").value;
-  $("speedValue").textContent = sliderToSpeed($("speed").value) + " ms";
+  $("speedValue").textContent = $("speed").value;
 }
 
 async function refresh() {

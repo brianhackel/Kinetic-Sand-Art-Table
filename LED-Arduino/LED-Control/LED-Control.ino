@@ -32,7 +32,7 @@ You will need to install the WS2812FX library which can be found here: https://g
 #include <WS2812FX.h>
 
 #define LED_PIN    6  // digital pin used to drive the LED strip
-#define LED_COUNT 70  // number of LEDs on the strip - if you make a larger table with more LED's then adjust this number
+#define LED_COUNT 60  // number of LEDs on the strip - if you make a larger table with more LED's then adjust this number
 
 /*
   Serial protocol (115200 baud, one command per line, terminated by \n; \r is ignored)
@@ -87,7 +87,7 @@ void setup() {
   Serial.begin(115200);
 
   tableSurfaceLEDs.init();
-  tableSurfaceLEDs.setBrightness(currentBrightness);
+  tableSurfaceLEDs.setBrightness(max(currentBrightness, 1));
   tableSurfaceLEDs.setSpeed(currentSpeed);
   setPattern(0);
 
@@ -122,6 +122,21 @@ bool parseNumber(const char *arg, long &value) {
   return end != arg && *end == '\0';
 }
 
+// Parses exactly six hex digits (either case) into rgb; returns false otherwise.
+bool parseColor(const char *arg, uint32_t &rgb) {
+  rgb = 0;
+  for (byte i = 0; i < 6; i++) {
+    char c = arg[i];
+    byte digit;
+    if (c >= '0' && c <= '9') digit = c - '0';
+    else if (c >= 'a' && c <= 'f') digit = c - 'a' + 10;
+    else if (c >= 'A' && c <= 'F') digit = c - 'A' + 10;
+    else return false;
+    rgb = (rgb << 4) | digit;
+  }
+  return arg[6] == '\0';
+}
+
 void handleCommand(char *line) {
   char cmd = line[0];
   char *arg = line + 1;
@@ -133,9 +148,8 @@ void handleCommand(char *line) {
   }
 
   if (cmd == 'C') {
-    char *end;
-    unsigned long rgb = strtoul(arg, &end, 16);
-    if (end == arg || *end != '\0' || strlen(arg) != 6) {
+    uint32_t rgb;
+    if (!parseColor(arg, rgb)) {
       Serial.println(F("ERR bad color"));
       return;
     }
@@ -161,7 +175,8 @@ void handleCommand(char *line) {
       break;
     case 'B':
       currentBrightness = constrain(n, 0, maximumBrightnesAllowed);
-      tableSurfaceLEDs.setBrightness(currentBrightness);
+      // this WS2812FX version treats 0 as "no scaling" (full brightness); 1 is the dimmest (off)
+      tableSurfaceLEDs.setBrightness(max(currentBrightness, 1));
       break;
     case 'S':
       currentSpeed = constrain(n, minSpeed, maxSpeed);
