@@ -23,7 +23,12 @@ ls /dev/serial/by-id/                 # find the Nano
 The script fills in `led-web.service` for the current user and directory,
 installs it, adds the user to `dialout`, and starts it. Re-run it to change the port.
 
-Logs: `journalctl -u led-web -f`.
+Settings are remembered in `led-state.json`, separately for each pattern: switching to a pattern
+restores the brightness, speed and color it last had. "Off" in the pattern dropdown just sets the
+brightness to 0 (disabling the controls) without touching those remembered settings.
+
+Logs: `journalctl -u led-web -f`. The page also has a collapsible "Serial log" panel showing
+the traffic to and from the Nano (→ sent, ← received, ✂ bytes discarded unread), for diagnosing link problems.
 
 Then open `http://<pi-address>:5001`. Port 5001 is used because OctoPi already
 occupies 80 and 5000. The Nano and the GRBL Uno both appear as USB serial
