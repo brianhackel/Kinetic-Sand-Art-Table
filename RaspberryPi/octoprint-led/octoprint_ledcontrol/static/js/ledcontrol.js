@@ -9,10 +9,15 @@ $(function () {
         const self = this;
         const BASE = OctoPrint.getBlueprintUrl("ledcontrol");
 
-        // constants from /config (filled in on bind)
-        self.patterns = ko.observableArray([]);
-        self.maxBrightness = ko.observable(128);
-        let minSpeed = 2, maxSpeed = 10000, offPattern = -1, speedAgnostic = [], colorAgnostic = [];
+        self.loginState = parameters[0];
+
+        // Constants rendered into the sidebar by the server (data-config), so the dropdown never
+        // depends on a request that could run before login finishes.
+        const cfg = JSON.parse(document.getElementById("ledcontrol_panel").dataset.config);
+        self.patterns = ko.observableArray(cfg.patterns.map((name, id) => ({id: id, name: name})));
+        self.maxBrightness = ko.observable(cfg.max_brightness);
+        const minSpeed = cfg.min_speed, maxSpeed = cfg.max_speed, offPattern = cfg.off_pattern;
+        const speedAgnostic = cfg.speed_agnostic, colorAgnostic = cfg.color_agnostic;
 
         // current state
         self.pattern = ko.observable();
@@ -88,23 +93,17 @@ $(function () {
         self.onSpeed = function (vm, event) { self.speedSlider(Number(event.target.value)); sendSpeed(); };
         self.onColor = function (vm, event) { self.color(event.target.value); sendColor(); };
 
-        self.onStartupComplete = async function () {
-            const cfg = await get("config");
-            if (!cfg) return;
-            self.patterns(cfg.patterns.map((name, id) => ({id: id, name: name})));
-            self.maxBrightness(cfg.max_brightness);
-            minSpeed = cfg.min_speed;
-            maxSpeed = cfg.max_speed;
-            offPattern = cfg.off_pattern;
-            speedAgnostic = cfg.speed_agnostic;
-            colorAgnostic = cfg.color_agnostic;
-            self.refresh();
-        };
+        // The state endpoint needs a logged-in user whose permissions are loaded, which can happen
+        // after startup finishes, so load on login as well as when startup completes.
+        const refreshIfLoggedIn = () => { if (self.loginState.loggedIn()) self.refresh(); };
+        self.onStartupComplete = refreshIfLoggedIn;
+        self.onUserLoggedIn = refreshIfLoggedIn;
+        self.onDataUpdaterReconnect = refreshIfLoggedIn;
     }
 
     OCTOPRINT_VIEWMODELS.push({
         construct: LedControlViewModel,
-        dependencies: [],
+        dependencies: ["loginStateViewModel"],
         elements: ["#sidebar_plugin_ledcontrol"],
     });
 });

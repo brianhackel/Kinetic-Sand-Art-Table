@@ -310,6 +310,13 @@ class FakeLink:
         pass
 
 
+def ui_config():
+    """Constants the sidebar needs; rendered into the page, so no login or request is needed to get them."""
+    return {"patterns": PATTERNS + ["Off"], "off_pattern": OFF, "max_brightness": MAX_BRIGHTNESS,
+            "min_speed": MIN_SPEED, "max_speed": MAX_SPEED,
+            "speed_agnostic": sorted(SPEED_AGNOSTIC), "color_agnostic": sorted(COLOR_AGNOSTIC)}
+
+
 def _bad(msg):
     return {"error": msg}, 400
 
@@ -353,11 +360,6 @@ class LedController:
                 return {"error": reply}, 502
         remember()
         return {"ok": True}, 200
-
-    def config(self):
-        return {"patterns": PATTERNS + ["Off"], "off_pattern": OFF, "max_brightness": MAX_BRIGHTNESS,
-                "min_speed": MIN_SPEED, "max_speed": MAX_SPEED,
-                "speed_agnostic": sorted(SPEED_AGNOSTIC), "color_agnostic": sorted(COLOR_AGNOSTIC)}
 
     def ping(self):
         """Open the link (restoring saved settings to a freshly reset Nano). Raises LinkError."""

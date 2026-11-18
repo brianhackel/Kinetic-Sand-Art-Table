@@ -8,7 +8,7 @@ from octoprint.access import ADMIN_GROUP, USER_GROUP
 from octoprint.access.permissions import Permissions
 from octoprint.events import Events
 
-from .led_link import LedController, LinkError
+from .led_link import LedController, LinkError, ui_config
 
 __plugin_name__ = "LED Control"
 __plugin_version__ = "0.1.0"
@@ -106,6 +106,10 @@ class LedControlPlugin(
              "template": "ledcontrol_settings.jinja2"},
         ]
 
+    def get_template_vars(self):
+        # available in templates as plugin_ledcontrol_config
+        return {"config": ui_config()}
+
     def get_assets(self):
         return {"js": ["js/ledcontrol.js"], "css": ["css/ledcontrol.css"]}
 
@@ -143,10 +147,6 @@ class LedControlPlugin(
         if not self._allowed():
             return flask.make_response(flask.jsonify(error="Forbidden"), 403)
         return self._reply(fn())
-
-    @octoprint.plugin.BlueprintPlugin.route("/config", methods=["GET"])
-    def api_config(self):
-        return self._guard(lambda: (self.controller.config(), 200))
 
     @octoprint.plugin.BlueprintPlugin.route("/state", methods=["GET"])
     def api_state(self):

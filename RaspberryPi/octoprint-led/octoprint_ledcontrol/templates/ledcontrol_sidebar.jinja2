@@ -1,4 +1,4 @@
-<div id="ledcontrol_panel" class="ledcontrol">
+<div id="ledcontrol_panel" class="ledcontrol" data-config='{{ plugin_ledcontrol_config|tojson }}'>
     <label for="ledcontrol_pattern">Pattern</label>
     <select id="ledcontrol_pattern" class="input-block-level"
             data-bind="options: patterns, optionsText: 'name', optionsValue: 'id', value: pattern,
