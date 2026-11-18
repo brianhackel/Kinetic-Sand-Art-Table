@@ -4,17 +4,26 @@
             data-bind="options: patterns, optionsText: 'name', optionsValue: 'id', value: pattern,
                        event: {change: onPattern}"></select>
 
-    <label for="ledcontrol_brightness">Brightness <span data-bind="text: brightness"></span></label>
-    <input type="range" id="ledcontrol_brightness" min="0" data-bind="attr: {max: maxBrightness}, value: brightness,
-           enable: controlsEnabled, event: {input: onBrightness}">
+    <div data-bind="visible: controlsEnabled">
+        <label for="ledcontrol_brightness">Brightness <span data-bind="text: brightness"></span></label>
+        <input type="range" id="ledcontrol_brightness" min="0" data-bind="attr: {max: maxBrightness}, value: brightness,
+               event: {input: onBrightness}">
+    </div>
 
-    <label for="ledcontrol_speed">Speed <span data-bind="text: speedSlider"></span></label>
-    <input type="range" id="ledcontrol_speed" min="0" max="100" data-bind="value: speedSlider,
-           enable: speedEnabled, event: {input: onSpeed}">
+    <div data-bind="visible: speedEnabled">
+        <label for="ledcontrol_speed">Speed <span data-bind="text: speedSlider"></span></label>
+        <input type="range" id="ledcontrol_speed" min="0" max="100" data-bind="value: speedSlider,
+               event: {input: onSpeed}">
+    </div>
 
-    <label for="ledcontrol_color">Color</label>
-    <input type="color" id="ledcontrol_color" data-bind="value: color, enable: colorEnabled,
-           event: {input: onColor}">
+    <div data-bind="visible: colorEnabled">
+        <label>Color</label>
+        <div class="ledcontrol-swatches" data-bind="foreach: swatches">
+            <button type="button" class="ledcontrol-swatch"
+                    data-bind="style: {background: $data}, css: {selected: $parent.color() === $data},
+                               attr: {title: $data, 'aria-label': $data}, click: $parent.onSwatch"></button>
+        </div>
+    </div>
 
     <div class="ledcontrol-status" data-bind="text: statusText, css: {'ledcontrol-error': statusIsError}"></div>
 
