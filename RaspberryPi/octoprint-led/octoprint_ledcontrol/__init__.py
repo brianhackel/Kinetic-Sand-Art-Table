@@ -121,6 +121,14 @@ class LedControlPlugin(
 
     # -- API (served under /plugin/ledcontrol/) ---------------------------------------------
 
+    def is_blueprint_csrf_protected(self):
+        # CSRF-protect every route; the JS client sends the token. (Default only since 2.0.0.)
+        return True
+
+    def is_template_autoescaped(self):
+        # Escape template variables. (Default only since 2.1.0.)
+        return True
+
     @staticmethod
     def _allowed():
         return Permissions.PLUGIN_LEDCONTROL_CONTROL.can()
