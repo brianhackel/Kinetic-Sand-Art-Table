@@ -1,0 +1,31 @@
+<div id="ledcontrol_panel" class="ledcontrol">
+    <label for="ledcontrol_pattern">Pattern</label>
+    <select id="ledcontrol_pattern" class="input-block-level"
+            data-bind="options: patterns, optionsText: 'name', optionsValue: 'id', value: pattern,
+                       event: {change: onPattern}"></select>
+
+    <label for="ledcontrol_brightness">Brightness <span data-bind="text: brightness"></span></label>
+    <input type="range" id="ledcontrol_brightness" min="0" data-bind="attr: {max: maxBrightness}, value: brightness,
+           enable: controlsEnabled, event: {input: onBrightness}">
+
+    <label for="ledcontrol_speed">Speed <span data-bind="text: speedSlider"></span></label>
+    <input type="range" id="ledcontrol_speed" min="0" max="100" data-bind="value: speedSlider,
+           enable: speedEnabled, event: {input: onSpeed}">
+
+    <label for="ledcontrol_color">Color</label>
+    <input type="color" id="ledcontrol_color" data-bind="value: color, enable: colorEnabled,
+           event: {input: onColor}">
+
+    <div class="ledcontrol-status" data-bind="text: statusText, css: {'ledcontrol-error': statusIsError}"></div>
+
+    <details data-bind="event: {toggle: onLogToggle}">
+        <summary>Serial log</summary>
+        <div class="ledcontrol-log-buttons">
+            <button type="button" class="btn btn-mini" data-bind="click: clearLog">Clear</button>
+            <button type="button" class="btn btn-mini" data-bind="click: copyLog">Copy</button>
+        </div>
+        <div class="ledcontrol-log" data-bind="foreach: logLines">
+            <div data-bind="text: text, css: cls"></div>
+        </div>
+    </details>
+</div>
