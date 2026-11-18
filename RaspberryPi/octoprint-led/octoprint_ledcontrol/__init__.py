@@ -46,6 +46,7 @@ class LedControlPlugin(
                 baud=self._settings.get_int(["baud"]),
                 fake=self._settings.get_boolean(["fake"]),
                 log=self._logger.warning,
+                trace=self._logger.debug,  # shows in octoprint.log once debug logging is on for this plugin
             )
             return self._controller
 
@@ -150,11 +151,6 @@ class LedControlPlugin(
     @octoprint.plugin.BlueprintPlugin.route("/state", methods=["GET"])
     def api_state(self):
         return self._guard(lambda: self.controller.get_state())
-
-    @octoprint.plugin.BlueprintPlugin.route("/log", methods=["GET"])
-    def api_log(self):
-        since = flask.request.args.get("since", 0, type=int)
-        return self._guard(lambda: self.controller.log_since(since))
 
     @octoprint.plugin.BlueprintPlugin.route("/pattern", methods=["POST"])
     def api_pattern(self):

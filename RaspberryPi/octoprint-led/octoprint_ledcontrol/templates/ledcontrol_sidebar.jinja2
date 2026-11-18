@@ -18,14 +18,4 @@
 
     <div class="ledcontrol-status" data-bind="text: statusText, css: {'ledcontrol-error': statusIsError}"></div>
 
-    <details data-bind="event: {toggle: onLogToggle}">
-        <summary>Serial log</summary>
-        <div class="ledcontrol-log-buttons">
-            <button type="button" class="btn btn-mini" data-bind="click: clearLog">Clear</button>
-            <button type="button" class="btn btn-mini" data-bind="click: copyLog">Copy</button>
-        </div>
-        <div class="ledcontrol-log" data-bind="foreach: logLines">
-            <div data-bind="text: text, css: cls"></div>
-        </div>
-    </details>
 </div>

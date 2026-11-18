@@ -1,6 +1,6 @@
 # OctoPrint LED Control
 
-An OctoPrint 2.0 plugin that puts the sand table's LED controls (pattern, brightness, speed, color, serial log) in the OctoPrint **sidebar**. It talks to the Arduino Nano running `LED-Arduino/LED-Control` over its own USB serial port. It replaces the standalone `../led-web` Flask app, whose serial/persistence code it reuses (`octoprint_ledcontrol/led_link.py`).
+An OctoPrint 2.0 plugin that puts the sand table's LED controls (pattern, brightness, speed, color) in the OctoPrint **sidebar**. It talks to the Arduino Nano running `LED-Arduino/LED-Control` over its own USB serial port. It replaces the standalone `../led-web` Flask app, whose serial/persistence code it reuses (`octoprint_ledcontrol/led_link.py`).
 
 ## Layout
 
@@ -60,6 +60,7 @@ Then enable "Simulate the Nano" in Settings -> LED Control.
 
 ## Behavior notes
 
+- There is no serial console in the UI. To debug the link, use the standalone `../led-web` app, or turn on debug logging for `octoprint.plugins.ledcontrol` (Settings -> Logging) to see every serial send/receive in `octoprint.log`.
 - Controls need the **Control LEDs** permission (granted to Admin and User groups by default).
 - Optional settings: switch lights on at print start, Off after a print ends.
 - Changing the port/baud/simulate settings reconnects immediately.

@@ -88,49 +88,6 @@ $(function () {
         self.onSpeed = function (vm, event) { self.speedSlider(Number(event.target.value)); sendSpeed(); };
         self.onColor = function (vm, event) { self.color(event.target.value); sendColor(); };
 
-        // --- serial log: polls the server only while the panel is open ---
-        const LOG_MAX_LINES = 500;
-        const ARROWS = {tx: "→", rx: "←", drop: "✂", info: "·"};
-        self.logLines = ko.observableArray([]);
-        let logLast = 0, logTimer = null;
-
-        function logTime(t) {
-            const d = new Date(t * 1000), p = (n, w) => String(n).padStart(w, "0");
-            return p(d.getHours(), 2) + ":" + p(d.getMinutes(), 2) + ":" + p(d.getSeconds(), 2) + "." + p(d.getMilliseconds(), 3);
-        }
-
-        async function pollLog() {
-            let data;
-            try { data = await OctoPrint.get(BASE + "log?since=" + logLast); } catch (e) { return; }
-            const lines = data.entries.map(e => ({
-                text: logTime(e.t) + " " + (ARROWS[e.kind] || "?") + " " + e.text,
-                cls: /ERR/.test(e.text) ? "err" : e.kind,
-            }));
-            if (lines.length) {
-                const box = document.querySelector("#ledcontrol_panel .ledcontrol-log");
-                const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 20;
-                const all = self.logLines().concat(lines);
-                self.logLines(all.slice(-LOG_MAX_LINES));
-                if (atBottom) box.scrollTop = box.scrollHeight;
-            }
-            logLast = data.last;
-        }
-
-        self.onLogToggle = function (vm, event) {
-            clearInterval(logTimer);
-            logTimer = null;
-            if (event.target.open) {
-                pollLog();
-                logTimer = setInterval(pollLog, 1000);
-            }
-        };
-        self.clearLog = function () { self.logLines([]); };
-        self.copyLog = async function () {
-            const text = self.logLines().map(l => l.text).join("\n");
-            try { await navigator.clipboard.writeText(text); show("Log copied"); }
-            catch (e) { show("Copy failed (the clipboard needs https or localhost); select the log text by hand", true); }
-        };
-
         self.onStartupComplete = async function () {
             const cfg = await get("config");
             if (!cfg) return;

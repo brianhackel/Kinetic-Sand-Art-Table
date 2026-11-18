@@ -7,7 +7,6 @@ plugin constructs, and with the Flask routes replaced by LedController methods t
 Talks to the Arduino Nano running LED-Arduino/LED-Control over USB serial; the protocol is
 described at the top of LED-Control.ino.
 """
-import collections
 import json
 import os
 import re
@@ -175,25 +174,17 @@ class SavedSettings:
 
 
 class SerialLog:
-    """Ring buffer of recent serial events, shown in the UI to diagnose link problems.
+    """Forwards serial events to a callback (the plugin sends them to OctoPrint's debug log).
 
     kinds: tx (sent), rx (received), drop (bytes we discarded unread), info (everything else)
     """
 
-    def __init__(self, size=500):
-        self.entries = collections.deque(maxlen=size)
-        self.lock = threading.Lock()
-        self.next_id = 1
+    def __init__(self, emit=None):
+        self.emit = emit
 
     def add(self, kind, text):
-        with self.lock:
-            self.entries.append({"id": self.next_id, "t": time.time(), "kind": kind, "text": text})
-            self.next_id += 1
-
-    def since(self, last_id):
-        """Entries newer than last_id, and the newest id so far."""
-        with self.lock:
-            return [e for e in self.entries if e["id"] > last_id], self.next_id - 1
+        if self.emit is not None:
+            self.emit("serial %s: %s", kind, text)
 
 
 class LedLink:
@@ -334,8 +325,9 @@ def _int_field(body, name, lo, hi):
 class LedController:
     """The operations the web API exposes. Every method returns (payload dict, http status)."""
 
-    def __init__(self, state_file, port, baud=115200, fake=False, log=print):
-        self.serial_log = SerialLog()
+    def __init__(self, state_file, port, baud=115200, fake=False, log=print, trace=None):
+        """`log` gets warnings about the state file; `trace(fmt, *args)`, if given, gets every serial event."""
+        self.serial_log = SerialLog(trace)
         self.settings = SavedSettings(state_file, log)
         if fake:
             self.link = FakeLink(self.settings, self.serial_log)
@@ -366,10 +358,6 @@ class LedController:
         return {"patterns": PATTERNS + ["Off"], "off_pattern": OFF, "max_brightness": MAX_BRIGHTNESS,
                 "min_speed": MIN_SPEED, "max_speed": MAX_SPEED,
                 "speed_agnostic": sorted(SPEED_AGNOSTIC), "color_agnostic": sorted(COLOR_AGNOSTIC)}
-
-    def log_since(self, since):
-        entries, last = self.serial_log.since(since)
-        return {"entries": entries, "last": last}, 200
 
     def ping(self):
         """Open the link (restoring saved settings to a freshly reset Nano). Raises LinkError."""
