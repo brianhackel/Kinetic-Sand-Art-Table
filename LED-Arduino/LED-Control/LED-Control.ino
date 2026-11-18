@@ -32,199 +32,183 @@ You will need to install the WS2812FX library which can be found here: https://g
 #include <WS2812FX.h>
 
 #define LED_PIN    6  // digital pin used to drive the LED strip
-#define LED_COUNT 70  // number of LEDs on the strip - if you make a larger table with more LED's then adjust this number
+#define LED_COUNT 60  // number of LEDs on the strip - if you make a larger table with more LED's then adjust this number
 
-int maximumBrightnesAllowed = 128;  // set this value the maximum brightness you want to allow the LEDs to reach (0 -> 255)
-const byte interruptPin = 2;
-const byte potBrightness = A0;
-const byte potSpeed = A2;
-int patternNumber = 0;
-static unsigned long last_check_time = 0;
+/*
+  Serial protocol (115200 baud, one command per line, terminated by \n; \r is ignored)
 
-// for smoothing out the potentiometer readings
+    P <n>       select pattern 0..10
+    B <n>       brightness 0..255 (limited to maximumBrightnesAllowed)
+    S <n>       speed in ms per step (lower = faster)
+    C <rrggbb>  color as hex, until the next P command
+    ?           report current state
 
-const int numReadings = 10;
+  Every command is answered with OK or ERR <reason>; "?" answers with a STATE line instead of OK.
+  The sketch sends READY once at boot.
+*/
 
-int readingsBrightness[numReadings];      // the readings from the analog input
-int readBrightnessIndex = 0;              // the index of the current reading
-int totalBrightness = 0;                  // the running total
-int averageBrightness = 0;
-int inputBrightnessPin = A0;
+const int maximumBrightnesAllowed = 128;  // set this value the maximum brightness you want to allow the LEDs to reach (0 -> 255)
+const uint16_t minSpeed = 2;
+const uint16_t maxSpeed = 10000;
+
+struct Pattern {
+  uint8_t mode;
+  uint32_t color;
+};
+
+const Pattern patterns[] = {
+  {FX_MODE_CHASE_RAINBOW,      WHITE},   // 0
+  {FX_MODE_FADE,               WHITE},   // 1
+  {FX_MODE_COLOR_WIPE,         WHITE},   // 2
+  {FX_MODE_COLOR_WIPE_RANDOM,  CYAN},    // 3
+  {FX_MODE_RAINBOW,            RED},     // 4
+  {FX_MODE_RUNNING_LIGHTS,     WHITE},   // 5
+  {FX_MODE_SPARKLE,            WHITE},   // 6
+  {FX_MODE_COLOR_SWEEP_RANDOM, WHITE},   // 7
+  {FX_MODE_LARSON_SCANNER,     RED},     // 8
+  {FX_MODE_FIRE_FLICKER_SOFT,  ORANGE},  // 9
+  {FX_MODE_STATIC,             WHITE},   // 10
+};
+const int patternCount = sizeof(patterns) / sizeof(patterns[0]);
+
+int currentPattern = 0;
+int currentBrightness = 64;
+uint16_t currentSpeed = 1000;
+uint32_t currentColor = WHITE;
+
+const byte lineSize = 24;
+char lineBuffer[lineSize];
+byte lineLength = 0;
+bool lineOverflow = false;
 
 WS2812FX tableSurfaceLEDs = WS2812FX(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 void setup() {
   Serial.begin(115200);
 
-  pinMode(interruptPin, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(interruptPin), patternMode, FALLING);
   tableSurfaceLEDs.init();
-  pattern0();
+  tableSurfaceLEDs.setBrightness(max(currentBrightness, 1));
+  tableSurfaceLEDs.setSpeed(currentSpeed);
+  setPattern(0);
 
-    // initialize all the brightness readings to 50:
-  for (int thisBrightnessReading = 0; thisBrightnessReading < numReadings; thisBrightnessReading++) {
-    readingsBrightness[thisBrightnessReading] = 50;
+  Serial.println(F("READY"));
+}
+
+void setPattern(int n) {
+  currentPattern = n;
+  currentColor = patterns[n].color;
+  tableSurfaceLEDs.setMode(patterns[n].mode);
+  tableSurfaceLEDs.setColor(currentColor);
+  tableSurfaceLEDs.start();
+}
+
+void printState() {
+  Serial.print(F("STATE P="));
+  Serial.print(currentPattern);
+  Serial.print(F(" B="));
+  Serial.print(currentBrightness);
+  Serial.print(F(" S="));
+  Serial.print(currentSpeed);
+  Serial.print(F(" C="));
+  char hex[7];
+  snprintf(hex, sizeof(hex), "%06lX", (unsigned long)currentColor);
+  Serial.println(hex);
+}
+
+// Parses a decimal integer argument; returns false if it is missing or malformed.
+bool parseNumber(const char *arg, long &value) {
+  char *end;
+  value = strtol(arg, &end, 10);
+  return end != arg && *end == '\0';
+}
+
+// Parses exactly six hex digits (either case) into rgb; returns false otherwise.
+bool parseColor(const char *arg, uint32_t &rgb) {
+  rgb = 0;
+  for (byte i = 0; i < 6; i++) {
+    char c = arg[i];
+    byte digit;
+    if (c >= '0' && c <= '9') digit = c - '0';
+    else if (c >= 'a' && c <= 'f') digit = c - 'a' + 10;
+    else if (c >= 'A' && c <= 'F') digit = c - 'A' + 10;
+    else return false;
+    rgb = (rgb << 4) | digit;
+  }
+  return arg[6] == '\0';
+}
+
+void handleCommand(char *line) {
+  char cmd = line[0];
+  char *arg = line + 1;
+  while (*arg == ' ') arg++;
+
+  if (cmd == '?') {
+    printState();
+    return;
+  }
+
+  if (cmd == 'C') {
+    uint32_t rgb;
+    if (!parseColor(arg, rgb)) {
+      Serial.println(F("ERR bad color"));
+      return;
+    }
+    currentColor = rgb;
+    tableSurfaceLEDs.setColor(currentColor);
+    Serial.println(F("OK"));
+    return;
+  }
+
+  long n;
+  if ((cmd != 'P' && cmd != 'B' && cmd != 'S') || !parseNumber(arg, n)) {
+    Serial.println(F("ERR bad command"));
+    return;
+  }
+
+  switch (cmd) {
+    case 'P':
+      if (n < 0 || n >= patternCount) {
+        Serial.println(F("ERR pattern out of range"));
+        return;
+      }
+      setPattern(n);
+      break;
+    case 'B':
+      currentBrightness = constrain(n, 0, maximumBrightnesAllowed);
+      // this WS2812FX version treats 0 as "no scaling" (full brightness); 1 is the dimmest (off)
+      tableSurfaceLEDs.setBrightness(max(currentBrightness, 1));
+      break;
+    case 'S':
+      currentSpeed = constrain(n, minSpeed, maxSpeed);
+      tableSurfaceLEDs.setSpeed(currentSpeed);
+      break;
+  }
+  Serial.println(F("OK"));
+}
+
+// Collects serial bytes into lineBuffer without blocking; dispatches each complete line.
+void readSerial() {
+  while (Serial.available() > 0) {
+    char c = Serial.read();
+    if (c == '\r') continue;
+    if (c == '\n') {
+      if (lineOverflow) {
+        Serial.println(F("ERR line too long"));
+      } else if (lineLength > 0) {
+        lineBuffer[lineLength] = '\0';
+        handleCommand(lineBuffer);
+      }
+      lineLength = 0;
+      lineOverflow = false;
+    } else if (lineLength < lineSize - 1) {
+      lineBuffer[lineLength++] = c;
+    } else {
+      lineOverflow = true;
+    }
   }
 }
 
-
-void patternMode() {
-  
- static unsigned long last_interrupt_time = 0;
- unsigned long interrupt_time = millis();
- if (interrupt_time - last_interrupt_time > 400)    // If interrupts come faster than 400ms, assume it's a bounce and ignore
- {
-  
-  if (patternNumber == 10) {  
-    patternNumber = 0;
-  }
-  else {
-  patternNumber = ++patternNumber;
-  }
-  //Serial.print("New pattern number");
-  //Serial.println(patternNumber);
-   switch (patternNumber) {
-    case 0:
-    pattern0();
-    break;
-    case 1:
-    pattern1();
-    break;
-    case 2:
-    pattern2();
-    break;
-    case 3:
-    pattern3();
-    break;
-    case 4:
-    pattern4();
-    break;
-    case 5:
-    pattern5();
-    break;
-    case 6:
-    pattern6();
-    break;
-    case 7:
-    pattern7();
-    break;
-    case 8:
-    pattern8();
-    break;
-    case 9:
-    pattern9();
-    break;
-    case 10:
-    pattern10();
-    break;
-   }
-
- }
- last_interrupt_time = interrupt_time;
-}
-
-
-void pattern0() {
-
-  tableSurfaceLEDs .setMode(FX_MODE_CHASE_RAINBOW);
-  tableSurfaceLEDs.setColor(WHITE);
-  tableSurfaceLEDs.start();}
-
-void pattern1() {
-
-  tableSurfaceLEDs .setMode(FX_MODE_FADE);
-  tableSurfaceLEDs.setColor(WHITE);
-  tableSurfaceLEDs.start();}
-
-void pattern2() {
-
-  tableSurfaceLEDs .setMode(FX_MODE_COLOR_WIPE);
-  tableSurfaceLEDs.setColor(WHITE);
-  tableSurfaceLEDs.start();}
-
-
-void pattern3() {
-
-  tableSurfaceLEDs .setMode(FX_MODE_COLOR_WIPE_RANDOM);
-  tableSurfaceLEDs.setColor(CYAN);
-  tableSurfaceLEDs.start();}
-
-
-  void pattern4() {
-  tableSurfaceLEDs .setMode(FX_MODE_RAINBOW);
-  tableSurfaceLEDs.setColor(RED);
-  tableSurfaceLEDs.start();}
-
-  
-   void pattern5() {
-
-  tableSurfaceLEDs .setMode(FX_MODE_RUNNING_LIGHTS);
-  tableSurfaceLEDs.setColor(WHITE);
-  tableSurfaceLEDs.start();}
-
-
-     void pattern6() {
-
-  tableSurfaceLEDs .setMode(FX_MODE_SPARKLE);
-  tableSurfaceLEDs.setColor(WHITE);
-  tableSurfaceLEDs.start();}
-
-       void pattern7() {
-
-  tableSurfaceLEDs .setMode(FX_MODE_COLOR_SWEEP_RANDOM);
-  tableSurfaceLEDs.setColor(WHITE);
-  tableSurfaceLEDs.start();}
-
-         void pattern8() {
-
-  tableSurfaceLEDs .setMode(FX_MODE_LARSON_SCANNER);
-  tableSurfaceLEDs.setColor(RED);
-  tableSurfaceLEDs.start();}
-
-         void pattern9() {
-
-  tableSurfaceLEDs .setMode(FX_MODE_FIRE_FLICKER_SOFT);
-  tableSurfaceLEDs.setColor(ORANGE);
-  tableSurfaceLEDs.start();}
-
-
-           void pattern10() {
-
-  tableSurfaceLEDs .setMode(FX_MODE_STATIC);
-  tableSurfaceLEDs.setColor(WHITE);
-  tableSurfaceLEDs.start();}
-  
 void loop() {
   tableSurfaceLEDs.service();
-
-  unsigned long check_time = millis();
-  
-  if (check_time - last_check_time > 200){                              // If checks come faster than 300ms, assume it's a bounce and ignore
-
-
-      // read the input on the potentiometer to determine the requested brightness for the LEDs
-     
-    totalBrightness = totalBrightness - readingsBrightness[readBrightnessIndex];  // subtract the last Brightness reading:
-    readingsBrightness[readBrightnessIndex] = analogRead(inputBrightnessPin);     // read from the Brightness sensor:
-    totalBrightness = totalBrightness + readingsBrightness[readBrightnessIndex];  // add the reading to the total:
-    readBrightnessIndex = readBrightnessIndex + 1;                                // advance to the next position in the array:
-  
-    if (readBrightnessIndex >= numReadings) {                             // if we're at the end of the array...
-      readBrightnessIndex = 0;                                            // ...wrap around to the beginning:
-    }
-  
-    averageBrightness = totalBrightness / numReadings;                    // calculate the average:
-    int ledValueBrightness = map(averageBrightness, -47, 900, 0, maximumBrightnesAllowed);    // Map the brightness value to range of LEDs 
-    //Serial.print("Brightness of LEDs is set to ");
-    //Serial.println(ledValueBrightness);
-    tableSurfaceLEDs.setBrightness(ledValueBrightness);                 //set the table LEDs brightness value
-    
-    int potValueSpeed = analogRead(potSpeed);                           // read the input on analog pin 2 to determine the speed for the LED patterns
-    long ledValueSpeed = map(potValueSpeed, 0, 1100, 0, 100000);         // read the input on the potentiometer to determine the requested speed for the LEDs
-    //Serial.print("Speed of LED pattern set to ");
-    //Serial.println(ledValueSpeed);
-    tableSurfaceLEDs.setSpeed(ledValueSpeed);                           //set the table LEDs pattern speed
-    
-    last_check_time = check_time;
-  }  
+  readSerial();
 }

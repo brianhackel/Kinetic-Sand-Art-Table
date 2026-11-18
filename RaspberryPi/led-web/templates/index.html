@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sand Table LEDs</title>
+<style>
+  body { font-family: sans-serif; max-width: 28rem; margin: 1rem auto; padding: 0 1rem; }
+  label { display: block; margin-top: 1.2rem; font-weight: bold; }
+  select, input[type=range] { width: 100%; }
+  /* iOS Safari renders a stretched color input as tiny floating swatches; strip native chrome so the swatch fills the box */
+  input[type=color] { -webkit-appearance: none; appearance: none; display: block; box-sizing: border-box;
+    width: 100%; height: 3rem; padding: 0; border: 1px solid #ccc; border-radius: 0.5rem; background: none; }
+  input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+  input[type=color]::-webkit-color-swatch { border: none; border-radius: 0.5rem; }
+  input[type=color]::-moz-color-swatch { border: none; border-radius: 0.5rem; }
+  input:disabled { opacity: 0.4; }
+  #status { margin-top: 1.5rem; color: #666; min-height: 1.2rem; }
+  #status.error { color: #b00020; }
+  #logPanel { margin-top: 1.5rem; }
+  #logPanel summary { cursor: pointer; font-weight: bold; }
+  #logButtons { margin: 0.5rem 0; }
+  #log { font: 0.75rem/1.3 monospace; height: 16rem; overflow: auto; border: 1px solid #ccc;
+    border-radius: 0.3rem; padding: 0.3rem; white-space: pre-wrap; word-break: break-all; }
+  #log .tx { color: #0b57d0; }
+  #log .rx { color: #137333; }
+  #log .drop { color: #b06000; }
+  #log .info { color: #666; }
+  #log .err { color: #b00020; font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>Sand Table LEDs</h1>
+
+<label for="pattern">Pattern</label>
+<select id="pattern">
+  {% for name in patterns %}<option value="{{ loop.index0 }}">{{ name }}</option>
+  {% endfor %}
+</select>
+
+<label for="brightness">Brightness <span id="brightnessValue"></span></label>
+<input type="range" id="brightness" min="0" max="{{ max_brightness }}">
+
+<label for="speed">Speed <span id="speedValue"></span></label>
+<!-- 0..100, right = faster; mapped to the Arduino's ms per step on a log scale -->
+<input type="range" id="speed" min="0" max="100">
+
+<label for="color">Color</label>
+<input type="color" id="color">
+
+<div id="status"></div>
+
+<details id="logPanel">
+  <summary>Serial log</summary>
+  <div id="logButtons">
+    <button type="button" id="logClear">Clear</button>
+    <button type="button" id="logCopy">Copy</button>
+  </div>
+  <div id="log"></div>
+</details>
+
+<script>
+const MIN_SPEED = {{ min_speed }}, MAX_SPEED = {{ max_speed }};
+// patterns (by index) for which the speed slider / color picker would do nothing
+const SPEED_AGNOSTIC = {{ speed_agnostic|tojson }}, COLOR_AGNOSTIC = {{ color_agnostic|tojson }};
+// the "Off" dropdown entry: not a real pattern; all the controls are disabled while it is selected
+const OFF = {{ off_pattern }};
+const $ = id => document.getElementById(id);
+const statusEl = $("status");
+
+// slider position 0..100 (100 = fastest) <-> ms per step, on a log scale
+const SPEED_RATIO = Math.log(MAX_SPEED / MIN_SPEED);
+const sliderToSpeed = v => Math.round(MIN_SPEED * Math.exp(SPEED_RATIO * (1 - Number(v) / 100)));
+const speedToSlider = s => Math.round(100 * (1 - Math.log(s / MIN_SPEED) / SPEED_RATIO));
+
+function show(msg, isError) {
+  statusEl.textContent = msg;
+  statusEl.className = isError ? "error" : "";
+}
+
+async function api(path, body) {
+  try {
+    const r = await fetch("/api/" + path, body === undefined ? {} : {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(body),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || r.statusText);
+    show("");
+    return data;
+  } catch (e) {
+    show(e.message, true);
+    return null;
+  }
+}
+
+function debounce(fn, ms) {
+  let t;
+  return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+}
+
+function updateLabels() {
+  $("brightnessValue").textContent = $("brightness").value;
+  $("speedValue").textContent = $("speed").value;
+}
+
+function updateEnabled() {
+  const p = Number($("pattern").value);
+  const off = p === OFF;
+  $("brightness").disabled = off;
+  $("speed").disabled = off || SPEED_AGNOSTIC.includes(p);
+  $("color").disabled = off || COLOR_AGNOSTIC.includes(p);
+}
+
+// Bumped on every pattern change so a slower, older state read can't overwrite the newer choice.
+let refreshId = 0;
+
+async function refresh() {
+  const id = ++refreshId;
+  const s = await api("state");
+  if (!s || id !== refreshId) return;
+  $("pattern").value = s.pattern;
+  $("brightness").value = s.brightness;
+  $("speed").value = speedToSlider(s.speed);
+  $("color").value = s.color.toLowerCase();
+  updateLabels();
+  updateEnabled();
+}
+
+// The server restores the new pattern's remembered settings, so re-read state afterwards.
+$("pattern").addEventListener("change", async () => {
+  updateEnabled();
+  refreshId++;  // discard any state read already in flight
+  await api("pattern", {pattern: Number($("pattern").value)});
+  refresh();
+});
+$("brightness").addEventListener("input", () => {
+  updateLabels();
+  sendBrightness();
+});
+$("speed").addEventListener("input", () => {
+  updateLabels();
+  sendSpeed();
+});
+$("color").addEventListener("input", () => sendColor());
+
+const sendBrightness = debounce(() => api("brightness", {brightness: Number($("brightness").value)}), 100);
+const sendSpeed = debounce(() => api("speed", {speed: sliderToSpeed($("speed").value)}), 100);
+const sendColor = debounce(() => api("color", {color: $("color").value}), 100);
+
+// --- serial log panel: polls the server only while the panel is open ---
+const logEl = $("log");
+const LOG_MAX_LINES = 500;
+const ARROWS = {tx: "→", rx: "←", drop: "✂", info: "·"};
+let logLast = 0, logTimer = null;
+
+function logTime(t) {
+  const d = new Date(t * 1000), p = (n, w) => String(n).padStart(w, "0");
+  return p(d.getHours(), 2) + ":" + p(d.getMinutes(), 2) + ":" + p(d.getSeconds(), 2) + "." + p(d.getMilliseconds(), 3);
+}
+
+async function pollLog() {
+  try {
+    const r = await fetch("/api/log?since=" + logLast);
+    const data = await r.json();
+    if (!r.ok) return;
+    const atBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 20;
+    for (const e of data.entries) {
+      const line = document.createElement("div");
+      line.className = /ERR/.test(e.text) ? "err" : e.kind;
+      line.textContent = logTime(e.t) + " " + (ARROWS[e.kind] || "?") + " " + e.text;
+      logEl.appendChild(line);
+    }
+    while (logEl.childElementCount > LOG_MAX_LINES) logEl.firstChild.remove();
+    logLast = data.last;
+    if (atBottom) logEl.scrollTop = logEl.scrollHeight;
+  } catch (e) { /* ignore; try again next tick */ }
+}
+
+$("logPanel").addEventListener("toggle", () => {
+  clearInterval(logTimer);
+  logTimer = null;
+  if ($("logPanel").open) {
+    pollLog();
+    logTimer = setInterval(pollLog, 1000);
+  }
+});
+$("logClear").addEventListener("click", () => { logEl.textContent = ""; });
+$("logCopy").addEventListener("click", async () => {
+  const text = Array.from(logEl.children, c => c.textContent).join("\n");
+  try { await navigator.clipboard.writeText(text); show("Log copied"); }
+  catch (e) {  // clipboard API needs https/localhost; fall back to selecting the text
+    const range = document.createRange();
+    range.selectNodeContents(logEl);
+    getSelection().removeAllRanges();
+    getSelection().addRange(range);
+    show("Select-all done; press Ctrl/Cmd+C to copy", false);
+  }
+});
+
+refresh();
+</script>
+</body>
+</html>

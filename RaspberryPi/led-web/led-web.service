@@ -1,0 +1,16 @@
+[Unit]
+Description=Sand table LED web interface
+After=network.target
+
+# Template: the install step in README.md replaces the __PLACEHOLDERS__.
+[Service]
+User=__USER__
+Group=dialout
+WorkingDirectory=__DIR__
+Environment=LED_PORT=__LED_PORT__
+# One worker only: a single process must own the serial port.
+ExecStart=__DIR__/venv/bin/gunicorn --workers 1 --threads 4 --bind 0.0.0.0:5001 app:app
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
