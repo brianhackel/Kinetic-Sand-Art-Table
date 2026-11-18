@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "OctoPrint-LedControl"
+version = "0.1.0"
+description = "Control the Kinetic Sand Art Table LEDs (Arduino Nano over serial) from the OctoPrint sidebar."
+requires-python = ">=3.9,<4"
+dependencies = ["OctoPrint>=2.0.0"]
+
+[project.entry-points."octoprint.plugin"]
+ledcontrol = "octoprint_ledcontrol"
+
+[tool.setuptools.packages.find]
+include = ["octoprint_ledcontrol*"]
+
+[tool.setuptools.package-data]
+octoprint_ledcontrol = ["templates/*", "static/js/*", "static/css/*"]

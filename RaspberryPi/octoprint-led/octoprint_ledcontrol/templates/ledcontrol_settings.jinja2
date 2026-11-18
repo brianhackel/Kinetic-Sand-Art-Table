@@ -1,0 +1,40 @@
+<form class="form-horizontal">
+    <div class="control-group">
+        <label class="control-label" for="ledcontrol_setting_port">Serial port</label>
+        <div class="controls">
+            <input type="text" id="ledcontrol_setting_port" class="input-xlarge"
+                   data-bind="value: settings.plugins.ledcontrol.port">
+            <span class="help-block">
+                The LED Arduino Nano's port, <em>not</em> the GRBL printer's. Prefer a stable
+                <code>/dev/serial/by-id/...</code> path so the two devices can't swap.
+            </span>
+        </div>
+    </div>
+    <div class="control-group">
+        <label class="control-label" for="ledcontrol_setting_baud">Baud rate</label>
+        <div class="controls">
+            <input type="number" id="ledcontrol_setting_baud" class="input-small"
+                   data-bind="value: settings.plugins.ledcontrol.baud">
+        </div>
+    </div>
+    <div class="control-group">
+        <div class="controls">
+            <label class="checkbox">
+                <input type="checkbox" data-bind="checked: settings.plugins.ledcontrol.fake">
+                Simulate the Nano (no hardware; for trying the UI)
+            </label>
+        </div>
+    </div>
+    <div class="control-group">
+        <div class="controls">
+            <label class="checkbox">
+                <input type="checkbox" data-bind="checked: settings.plugins.ledcontrol.on_at_print_start">
+                Switch the lights back on when a print starts (if they are Off)
+            </label>
+            <label class="checkbox">
+                <input type="checkbox" data-bind="checked: settings.plugins.ledcontrol.off_after_print">
+                Switch the lights Off when a print finishes, fails or is cancelled
+            </label>
+        </div>
+    </div>
+</form>
