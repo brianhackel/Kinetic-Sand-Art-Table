@@ -91,7 +91,9 @@ $(function () {
         // Read the value off the event so we never depend on whether Knockout's binding ran first.
         self.onBrightness = function (vm, event) { self.brightness(Number(event.target.value)); sendBrightness(); };
         self.onSpeed = function (vm, event) { self.speedSlider(Number(event.target.value)); sendSpeed(); };
-        self.onColor = function (vm, event) { self.color(event.target.value); sendColor(); };
+        self.swatches = ["#ffffff", "#ff0000", "#ff7f00", "#ffd000", "#80ff00", "#00ff00",
+                         "#00ff95", "#00ffff", "#0080ff", "#0000ff", "#8000ff", "#ff00ff"];
+        self.onSwatch = function (hex) { self.color(hex); sendColor(); };
 
         // The state endpoint needs a logged-in user whose permissions are loaded, which can happen
         // after startup finishes, so load on login as well as when startup completes.
