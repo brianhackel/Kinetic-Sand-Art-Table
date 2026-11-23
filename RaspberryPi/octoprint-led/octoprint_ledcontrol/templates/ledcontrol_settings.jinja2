@@ -35,6 +35,14 @@
                 <input type="checkbox" data-bind="checked: settings.plugins.ledcontrol.off_after_print">
                 Switch the lights Off when a print finishes, fails or is cancelled
             </label>
+            <label class="checkbox">
+                <input type="checkbox" data-bind="checked: settings.plugins.ledcontrol.off_at_nighttime">
+                Switch the lights Off at a specific time every day
+            </label>
+            <label for="ledcontrol_setting_nighttime">Off time</label>
+            <input type="time" id="ledcontrol_setting_nighttime"
+                data-bind="value: settings.plugins.ledcontrol.nighttime,
+                enable: settings.plugins.ledcontrol.off_at_nighttime">
         </div>
     </div>
 </form>
