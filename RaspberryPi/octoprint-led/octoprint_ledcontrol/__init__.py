@@ -1,6 +1,7 @@
 """OctoPrint plugin: control the sand table's WS2812 LEDs (Arduino Nano over serial) from the sidebar."""
 import os
 import threading
+from datetime import datetime, timedelta
 
 import flask
 import octoprint.plugin
@@ -14,6 +15,8 @@ __plugin_name__ = "LED Control"
 __plugin_version__ = "0.1.0"
 __plugin_description__ = "Control the Kinetic Sand Art Table LEDs from the OctoPrint sidebar."
 __plugin_pythoncompat__ = ">=3.9,<4"
+
+NIGHTTIME_GRACE = timedelta(minutes=5)  # how late the nightly switch-off may still fire
 
 PERMISSION_KEY = "CONTROL"  # becomes Permissions.PLUGIN_LEDCONTROL_CONTROL
 
@@ -57,6 +60,7 @@ class LedControlPlugin(
     def on_after_startup(self):
         self._build_controller()
         threading.Thread(target=self._restore_on_startup, daemon=True, name="ledcontrol-restore").start()
+        threading.Thread(target=self._nighttime_loop, daemon=True, name="ledcontrol-nighttime").start()
 
     def _restore_on_startup(self):
         """Open the link so the saved settings reach the Nano without waiting for a web request.
@@ -72,6 +76,31 @@ class LedControlPlugin(
                 self._logger.info("waiting for the Nano to restore settings: %s", e)
                 self._stop.wait(5)
 
+    def _nighttime_loop(self):
+        """Switch the lights off once a day at the configured time."""
+        last_fired = None  # date of the last firing, so we fire once per day
+        while not self._stop.is_set():
+            try:
+                if self._settings.get_boolean(["off_at_nighttime"]):
+                    now = datetime.now()
+                    due = self._nighttime_due(now)
+                    # Fire within a grace window after the target, so a delayed poll or a short stall
+                    # doesn't skip the day, but enabling the setting later in the day doesn't fire at once.
+                    if due is not None and due <= now < due + NIGHTTIME_GRACE and last_fired != now.date():
+                        last_fired = now.date()
+                        self._run_event_action("nighttime", self.controller.lights_off)
+            except Exception:
+                self._logger.exception("nighttime check failed")
+            self._stop.wait(10)
+
+    def _nighttime_due(self, now):
+        """Today's configured off time as a datetime, or None if the setting isn't a valid HH:MM."""
+        try:
+            t = datetime.strptime(self._settings.get(["nighttime"]), "%H:%M")
+        except (TypeError, ValueError):
+            return None
+        return now.replace(hour=t.hour, minute=t.minute, second=0, microsecond=0)
+
     def on_shutdown(self):
         self._stop.set()
         if self._controller is not None:
@@ -86,6 +115,8 @@ class LedControlPlugin(
             "fake": False,  # simulated Nano, for trying the UI without hardware
             "on_at_print_start": False,  # switch the lights back on when a print starts
             "off_after_print": False,  # switch the lights off when a print finishes, fails or is cancelled
+            "off_at_nighttime": False,  # switch the lights off once a day at `nighttime`
+            "nighttime": "00:00",  # HH:MM, 24-hour, Pi local time
         }
 
     def on_settings_save(self, data):
